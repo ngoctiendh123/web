@@ -149,26 +149,27 @@ async function updateIndexedDB(firebaseData) {
 }
 async function syncFirebaseToIndexedDB() {
     const db = await openIndexedDB();
-    const foodsCollection = collection(firebaseDB, "foods");
+    const foodsStore = db.transaction("foods", "readonly").objectStore("foods");
 
-    // 🟢 Lấy dữ liệu từ IndexedDB trước
-    let indexedDBData = await getAllFoodsFromIndexedDB();
+    foodsStore.count().onsuccess = async function(event) {
+        let count = event.target.result;
 
-    if (indexedDBData.length === 0) {
-        console.log("⚠️ IndexedDB trống, tải dữ liệu từ Firebase...");
-        const snapshot = await getDocs(foodsCollection);
-        let firebaseData = snapshot.docs.map(doc => ({
-            id: parseInt(doc.id, 10),
-            ...doc.data()
-        }));
+        if (count === 0) {
+            console.log("⚠️ IndexedDB (foods) trống, tạo và đồng bộ từ Firebase...");
+            const snapshot = await getDocs(collection(firebaseDB, "foods"));
+            let firebaseData = snapshot.docs.map(doc => ({
+                id: parseInt(doc.id, 10),
+                ...doc.data()
+            }));
 
-        await updateIndexedDB(firebaseData); // ✅ Cập nhật IndexedDB
-    } else {
-        console.log("✅ IndexedDB đã có dữ liệu, không tải từ Firebase.");
-    }
+            await updateIndexedDB(firebaseData); // ✅ Tạo IndexedDB + đồng bộ dữ liệu
+        } else {
+            console.log("✅ IndexedDB (foods) đã có dữ liệu.");
+        }
+    };
 
-    // 🔄 Tiếp tục lắng nghe thay đổi từ Firebase để cập nhật IndexedDB
-    onSnapshot(foodsCollection, async (snapshot) => {
+    // 🔄 Lắng nghe Firebase để cập nhật IndexedDB khi có thay đổi
+    onSnapshot(collection(firebaseDB, "foods"), async (snapshot) => {
         let firebaseData = snapshot.docs.map(doc => ({
             id: parseInt(doc.id, 10),
             ...doc.data()
@@ -232,7 +233,7 @@ async function updateFood(foodId, newName, newPrice) {
 
 
 // ✅ Kích hoạt đồng bộ Firebase → IndexedDB
-syncFirebaseToIndexedDB(); 
+
 
 export { db, addFood, deleteFood, updateFood,fetchFoods };
 // ===============================
@@ -274,29 +275,36 @@ async function saveRevenue(amount) {
 // 🔄 **Đồng bộ doanh thu từ Firebase xuống IndexedDB**
 // ===============================
 async function syncRevenueToIndexedDB() {
-    const revenueCollection = collection(db, "revenue");
-    onSnapshot(revenueCollection, async (snapshot) => {
-        try {
+    const db = await openIndexedDB();
+    const revenueStore = db.transaction("revenue", "readonly").objectStore("revenue");
+
+    revenueStore.count().onsuccess = async function(event) {
+        let count = event.target.result;
+
+        if (count === 0) {
+            console.log("⚠️ IndexedDB (revenue) trống, tạo và đồng bộ từ Firebase...");
+            const snapshot = await getDocs(collection(firebaseDB, "revenue"));
             let firebaseData = snapshot.docs.map(doc => ({
                 id: doc.id, // YYYY-MM-DD
                 total: doc.data().total
             }));
 
-            const db = await openIndexedDB();
-            if (!db.objectStoreNames.contains("revenue")) return;
-
-            let transaction = db.transaction(["revenue"], "readwrite");
-            let store = transaction.objectStore("revenue");
-
-            store.clear().onsuccess = async () => {
-                await Promise.all(firebaseData.map(revenue => store.put(revenue)));
-                console.log("✅ IndexedDB đã cập nhật doanh thu!");
-            };
-        } catch (error) {
-            console.error("❌ Lỗi đồng bộ doanh thu Firebase → IndexedDB:", error);
+            await updateRevenueIndexedDB(firebaseData); // ✅ Tạo IndexedDB + đồng bộ dữ liệu
+        } else {
+            console.log("✅ IndexedDB (revenue) đã có dữ liệu.");
         }
+    };
+
+    // 🔄 Lắng nghe Firebase để cập nhật IndexedDB khi có thay đổi
+    onSnapshot(collection(firebaseDB, "revenue"), async (snapshot) => {
+        let firebaseData = snapshot.docs.map(doc => ({
+            id: doc.id, // YYYY-MM-DD
+            total: doc.data().total
+        }));
+        await updateRevenueIndexedDB(firebaseData);
     });
 }
+syncRevenueToIndexedDB();
 
 // ===============================
 // 📦 **Mở IndexedDB và đảm bảo có bảng revenue**
