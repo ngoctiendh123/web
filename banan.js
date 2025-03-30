@@ -17,7 +17,7 @@ let dbInstance = null;
 async function openIndexedDB() {
     if (dbInstance) return dbInstance;
     return new Promise((resolve, reject) => {
-        let request = indexedDB.open("FoodDB", 2);
+        let request = indexedDB.open("FoodDB", 3);
         request.onupgradeneeded = function (event) {
             let db = event.target.result;
             if (!db.objectStoreNames.contains("foods")) {
