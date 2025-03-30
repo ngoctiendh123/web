@@ -147,30 +147,38 @@ async function updateIndexedDB(firebaseData) {
         console.log("✅ IndexedDB đã cập nhật xong!");
     };
 }
-function syncFirebaseToIndexedDB() {
-    const foodsCollection = collection(db, "foods");
+async function syncFirebaseToIndexedDB() {
+    const db = await openIndexedDB();
+    const foodsCollection = collection(firebaseDB, "foods");
+
+    // 🟢 Lấy dữ liệu từ IndexedDB trước
+    let indexedDBData = await getAllFoodsFromIndexedDB();
+
+    if (indexedDBData.length === 0) {
+        console.log("⚠️ IndexedDB trống, tải dữ liệu từ Firebase...");
+        const snapshot = await getDocs(foodsCollection);
+        let firebaseData = snapshot.docs.map(doc => ({
+            id: parseInt(doc.id, 10),
+            ...doc.data()
+        }));
+
+        await updateIndexedDB(firebaseData); // ✅ Cập nhật IndexedDB
+    } else {
+        console.log("✅ IndexedDB đã có dữ liệu, không tải từ Firebase.");
+    }
+
+    // 🔄 Tiếp tục lắng nghe thay đổi từ Firebase để cập nhật IndexedDB
     onSnapshot(foodsCollection, async (snapshot) => {
-        try {
-            let firebaseData = snapshot.docs.map(doc => ({ id: parseInt(doc.id, 10), ...doc.data() }));
-            
-            if (firebaseData.length === 0) return;
-
-            let indexedDBData = await getAllFoodsFromIndexedDB();
-            let firebaseMap = new Map(firebaseData.map(food => [food.id, JSON.stringify(food)]));
-            let indexedDBMap = new Map(indexedDBData.map(food => [food.id, JSON.stringify(food)]));
-            
-            let hasChange = firebaseData.some(food => indexedDBMap.get(food.id) !== firebaseMap.get(food.id)) ||
-                            indexedDBData.some(food => !firebaseMap.has(food.id));
-
-            if (hasChange) {
-                console.log("🔄 Dữ liệu có thay đổi, cập nhật IndexedDB...");
-                await updateIndexedDB(firebaseData);
-            }
-        } catch (error) {
-            console.error("❌ Lỗi đồng bộ Firebase → IndexedDB:", error);
-        }
+        let firebaseData = snapshot.docs.map(doc => ({
+            id: parseInt(doc.id, 10),
+            ...doc.data()
+        }));
+        await updateIndexedDB(firebaseData);
     });
 }
+
+// ✅ Kích hoạt đồng bộ khi mở trang
+syncFirebaseToIndexedDB();
 
 
 // ===============================
